@@ -254,6 +254,9 @@ export function Dashboard({ data }: DashboardProps) {
               <Link className="primary-button" href="/insights">
                 Abrir rankings e alertas
               </Link>
+              <Link className="secondary-button" href="/radar">
+                Abrir radar de licitacoes
+              </Link>
               <Link className="secondary-button" href="/fornecedores">
                 Explorar fornecedores
               </Link>

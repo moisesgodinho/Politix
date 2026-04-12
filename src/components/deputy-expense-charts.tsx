@@ -102,6 +102,20 @@ function truncateLabel(label: string, maxLength: number) {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
 }
 
+function buildExpenseRowKey(expense: DeputyExpense, index: number) {
+  return [
+    expense.documentNumber,
+    expense.documentDate,
+    expense.supplierDocument,
+    expense.supplierName,
+    expense.expenseType,
+    expense.amount,
+    index
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join("|");
+}
+
 function matchesFilters(
   expense: DeputyExpense,
   selectedMonth: string | null,
@@ -567,7 +581,7 @@ export function DeputyExpenseCharts({ expenses }: DeputyExpenseChartsProps) {
                   <tbody className="divide-y divide-slate-200/70">
                     {visibleExpenses.map((expense, index) => (
                       <tr
-                        key={`${expense.documentNumber ?? "doc"}-${expense.documentDate ?? index}`}
+                        key={buildExpenseRowKey(expense, index)}
                         className="text-sm text-slate-700"
                       >
                         <td className="px-4 py-4">{formatDate(expense.documentDate)}</td>

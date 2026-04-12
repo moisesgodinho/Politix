@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { inflateRawSync } from "node:zlib";
 
 import { searchPoliticians, type Politician } from "@/lib/politics";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/lib/suppliers";
 
 const CEAP_REVALIDATE_SECONDS = 6 * 60 * 60;
+const CEAP_DEGRADED_REVALIDATE_SECONDS = 10 * 60;
 const PREFERRED_CEAP_YEAR = new Date().getFullYear();
 const CEAP_MAX_FALLBACK_YEARS = 6;
 
@@ -119,7 +120,7 @@ export type RankingFilters = {
   maxSpend?: number;
 };
 
-export type CeapAnalytics = {
+export type CeapAnalyticsBase = {
   year: number;
   updatedAt: string;
   sourceStatus: SourceStatus[];
@@ -138,6 +139,16 @@ export type CeapAnalytics = {
   topSuppliers: SupplierRankingItem[];
   alerts: CeapAlert[];
   suppliers: SupplierSummary[];
+};
+
+export type CeapAnalytics = CeapAnalyticsBase & {
+  filteredDeputies: DeputySpendingRank[];
+  appliedFilters: {
+    uf: string;
+    party: string;
+    minSpend?: number;
+    maxSpend?: number;
+  };
 };
 
 type CeapFilePayload = {
@@ -162,6 +173,65 @@ type CachedCeapDataset = {
   errorDetails?: string;
 };
 
+type MemoryCacheEntry<T> = {
+  value?: T;
+  expiresAt: number;
+  pending?: Promise<T>;
+};
+
+const ceapDatasetMemoryCache: MemoryCacheEntry<CachedCeapDataset> = {
+  expiresAt: 0
+};
+
+const ceapAnalyticsMemoryCache: MemoryCacheEntry<CeapAnalyticsBase> = {
+  expiresAt: 0
+};
+
+// A CEAP anual gera objetos grandes demais para o data cache do Next (> 2 MB),
+// entao usamos um cache em memoria simples neste modulo.
+const ceapModuleCache = new Map<string, MemoryCacheEntry<unknown>>();
+
+function unstable_cache<TArgs extends unknown[], TResult>(
+  loader: (...args: TArgs) => Promise<TResult>,
+  keyParts: string[] = [],
+  options?: {
+    revalidate?: number;
+  }
+) {
+  return async (...args: TArgs): Promise<TResult> => {
+    const cacheKey = JSON.stringify([keyParts, args]);
+    const ttlMs = (options?.revalidate ?? CEAP_REVALIDATE_SECONDS) * 1000;
+    const now = Date.now();
+    const current = ceapModuleCache.get(cacheKey);
+
+    if (current?.value !== undefined && now < current.expiresAt) {
+      return current.value as TResult;
+    }
+
+    if (current?.pending) {
+      return current.pending as Promise<TResult>;
+    }
+
+    const nextEntry: MemoryCacheEntry<unknown> = current ?? {
+      expiresAt: 0
+    };
+
+    nextEntry.pending = loader(...args)
+      .then((value) => {
+        nextEntry.value = value;
+        nextEntry.expiresAt = Date.now() + ttlMs;
+        return value;
+      })
+      .finally(() => {
+        nextEntry.pending = undefined;
+      });
+
+    ceapModuleCache.set(cacheKey, nextEntry);
+
+    return nextEntry.pending as Promise<TResult>;
+  };
+}
+
 function buildDegradedCeapDataset(error: unknown): CachedCeapDataset {
   const checkedAt = new Date().toISOString();
   const errorDetails =
@@ -173,7 +243,7 @@ function buildDegradedCeapDataset(error: unknown): CachedCeapDataset {
     attemptedYears: [PREFERRED_CEAP_YEAR],
     records: [],
     checkedAt,
-    sourceUrl: `https://www.camara.leg.br/cotas/Ano-${PREFERRED_CEAP_YEAR}.json`,
+    sourceUrl: buildCeapZipUrl(PREFERRED_CEAP_YEAR),
     upstreamLastModified: undefined,
     status: "degraded",
     errorDetails
@@ -217,17 +287,148 @@ function pickNumber(record: CeapRawRecord, keys: string[]) {
 }
 
 function sanitizeJsonText(payload: string) {
-  return payload.replace(/^\uFEFF/, "").trimStart();
+  return payload.replace(/^\u0000+/, "").replace(/^\uFEFF/, "").trimStart();
 }
 
-async function fetchCeapJson(year: number) {
+function buildCeapJsonUrl(year: number) {
+  return `https://www.camara.leg.br/cotas/Ano-${year}.json`;
+}
+
+function buildCeapZipUrl(year: number) {
+  return `https://www.camara.leg.br/cotas/Ano-${year}.json.zip`;
+}
+
+function parseJsonPayload(payload: string) {
+  const rawPayload = sanitizeJsonText(payload);
+
+  if (!rawPayload || rawPayload.startsWith("<")) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(rawPayload) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function findZipEndOfCentralDirectoryOffset(buffer: Buffer) {
+  const signature = 0x06054b50;
+  const minimumRecordSize = 22;
+  const searchStart = Math.max(0, buffer.length - 0xffff - minimumRecordSize);
+
+  for (let offset = buffer.length - minimumRecordSize; offset >= searchStart; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === signature) {
+      return offset;
+    }
+  }
+
+  return -1;
+}
+
+function extractFirstZipEntry(buffer: Buffer) {
+  const endOfCentralDirectoryOffset = findZipEndOfCentralDirectoryOffset(buffer);
+
+  if (endOfCentralDirectoryOffset < 0) {
+    throw new Error("Arquivo ZIP da CEAP sem diretório central válido.");
+  }
+
+  const centralDirectoryOffset = buffer.readUInt32LE(endOfCentralDirectoryOffset + 16);
+
+  if (buffer.readUInt32LE(centralDirectoryOffset) !== 0x02014b50) {
+    throw new Error("Entrada central do ZIP da CEAP inválida.");
+  }
+
+  const compressionMethod = buffer.readUInt16LE(centralDirectoryOffset + 10);
+  const compressedSize = buffer.readUInt32LE(centralDirectoryOffset + 20);
+  const fileNameLength = buffer.readUInt16LE(centralDirectoryOffset + 28);
+  const extraFieldLength = buffer.readUInt16LE(centralDirectoryOffset + 30);
+  const fileCommentLength = buffer.readUInt16LE(centralDirectoryOffset + 32);
+  const localHeaderOffset = buffer.readUInt32LE(centralDirectoryOffset + 42);
+  const fileName = buffer
+    .subarray(centralDirectoryOffset + 46, centralDirectoryOffset + 46 + fileNameLength)
+    .toString("utf8");
+  const nextCentralOffset =
+    centralDirectoryOffset + 46 + fileNameLength + extraFieldLength + fileCommentLength;
+
+  if (buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
+    throw new Error("Cabeçalho local do ZIP da CEAP inválido.");
+  }
+
+  const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
+  const localExtraFieldLength = buffer.readUInt16LE(localHeaderOffset + 28);
+  const compressedDataStart =
+    localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
+  const compressedDataEnd = compressedDataStart + compressedSize;
+  const compressedData = buffer.subarray(compressedDataStart, compressedDataEnd);
+
+  const entryBuffer =
+    compressionMethod === 0
+      ? compressedData
+      : compressionMethod === 8
+        ? inflateRawSync(compressedData)
+        : undefined;
+
+  if (!entryBuffer) {
+    throw new Error(`Método de compressão ZIP não suportado: ${compressionMethod}.`);
+  }
+
+  return {
+    fileName,
+    content: entryBuffer,
+    hasMoreEntries: nextCentralOffset < endOfCentralDirectoryOffset
+  };
+}
+
+async function fetchCeapJsonFromZip(year: number) {
   const checkedAt = new Date().toISOString();
-  const url = `https://www.camara.leg.br/cotas/Ano-${year}.json`;
+  const url = buildCeapZipUrl(year);
   const response = await fetch(url, {
     cache: "force-cache",
     next: {
       revalidate: CEAP_REVALIDATE_SECONDS,
-      tags: ["ceap", `ceap-${year}`]
+      tags: ["ceap", `ceap-${year}`, `ceap-zip-${year}`]
+    }
+  });
+
+  if (response.status === 404) {
+    return undefined;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Falha ao consultar CEAP ZIP ${year}: ${response.status}`);
+  }
+
+  const zipBuffer = Buffer.from(await response.arrayBuffer());
+
+  if (zipBuffer.length === 0) {
+    return undefined;
+  }
+
+  const entry = extractFirstZipEntry(zipBuffer);
+  const parsedPayload = parseJsonPayload(entry.content.toString("utf8"));
+
+  if (!parsedPayload) {
+    return undefined;
+  }
+
+  return {
+    year,
+    payload: parsedPayload,
+    checkedAt,
+    sourceUrl: url,
+    upstreamLastModified: response.headers.get("last-modified") ?? undefined
+  };
+}
+
+async function fetchCeapJsonFromRaw(year: number) {
+  const checkedAt = new Date().toISOString();
+  const url = buildCeapJsonUrl(year);
+  const response = await fetch(url, {
+    cache: "force-cache",
+    next: {
+      revalidate: CEAP_REVALIDATE_SECONDS,
+      tags: ["ceap", `ceap-${year}`, `ceap-raw-${year}`]
     }
   });
 
@@ -239,21 +440,9 @@ async function fetchCeapJson(year: number) {
     throw new Error(`Falha ao consultar CEAP ${year}: ${response.status}`);
   }
 
-  const rawPayload = sanitizeJsonText(await response.text());
+  const parsedPayload = parseJsonPayload(await response.text());
 
-  if (!rawPayload) {
-    return undefined;
-  }
-
-  if (rawPayload.startsWith("<")) {
-    return undefined;
-  }
-
-  let parsedPayload: unknown;
-
-  try {
-    parsedPayload = JSON.parse(rawPayload) as unknown;
-  } catch {
+  if (!parsedPayload) {
     return undefined;
   }
 
@@ -264,6 +453,16 @@ async function fetchCeapJson(year: number) {
     sourceUrl: url,
     upstreamLastModified: response.headers.get("last-modified") ?? undefined
   };
+}
+
+async function fetchCeapJson(year: number) {
+  const zipPayload = await fetchCeapJsonFromZip(year);
+
+  if (zipPayload) {
+    return zipPayload;
+  }
+
+  return fetchCeapJsonFromRaw(year);
 }
 
 async function resolveCeapJson(preferredYear = PREFERRED_CEAP_YEAR): Promise<CeapFilePayload> {
@@ -323,7 +522,7 @@ function parseCeapRecords(payload: unknown, fallbackYear: number) {
           "Fornecedor não informado"
         ),
         supplierDocument:
-          pickString(record, ["txtCNPJCPF", "cnpjCpfFornecedor", "cpfCnpjFornecedor"]) ||
+          pickString(record, ["txtCNPJCPF", "cnpjCpfFornecedor", "cpfCnpjFornecedor", "cnpjCPF"]) ||
           undefined,
         expenseType:
           pickString(record, ["txtDescricao", "tipoDespesa", "descricao"], "Categoria não informada"),
@@ -693,14 +892,14 @@ const getCeapRecordsCached = unstable_cache(
       return buildDegradedCeapDataset(error);
     }
   },
-  ["politix-ceap-records-v2"],
+  ["politix-ceap-records-v4"],
   {
     revalidate: CEAP_REVALIDATE_SECONDS
   }
 );
 
 const getCeapAnalyticsCached = unstable_cache(
-  async (): Promise<CeapAnalytics> => {
+  async (): Promise<CeapAnalyticsBase> => {
     const dataset = await getCeapRecordsCached();
     const records = dataset.records;
     const suppliers = buildSupplierSummaries(records);
@@ -765,7 +964,7 @@ const getCeapAnalyticsCached = unstable_cache(
       suppliers
     };
   },
-  ["politix-ceap-analytics-v2"],
+  ["politix-ceap-analytics-v4"],
   {
     revalidate: CEAP_REVALIDATE_SECONDS
   }

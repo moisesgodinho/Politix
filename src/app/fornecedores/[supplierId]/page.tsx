@@ -31,6 +31,27 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat("pt-BR").format(parsedDate);
 }
 
+function buildExpenseRowKey(
+  expense: Awaited<ReturnType<typeof getSupplierDetails>> extends infer T
+    ? T extends { recentExpenses: Array<infer U> }
+      ? U
+      : never
+    : never,
+  index: number
+) {
+  return [
+    expense.documentNumber,
+    expense.documentDate,
+    expense.deputyId,
+    expense.deputyName,
+    expense.expenseType,
+    expense.amount,
+    index
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join("|");
+}
+
 export default async function SupplierDetailsPage({ params }: SupplierPageProps) {
   const { supplierId } = await params;
   const [analytics, supplier] = await Promise.all([
@@ -168,7 +189,7 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
               <tbody className="divide-y divide-slate-200/70">
                 {supplier.recentExpenses.map((expense, index) => (
                   <tr
-                    key={`${expense.documentNumber ?? expense.documentDate ?? index}`}
+                    key={buildExpenseRowKey(expense, index)}
                     className="text-sm text-slate-700"
                   >
                     <td className="px-4 py-4">{formatDate(expense.documentDate)}</td>

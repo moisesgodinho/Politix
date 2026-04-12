@@ -67,6 +67,9 @@ export default async function SuppliersPage({ searchParams }: PageProps) {
               <Link className="primary-button" href="/insights">
                 Abrir rankings
               </Link>
+              <Link className="secondary-button" href="/radar">
+                Abrir radar de licitacoes
+              </Link>
             </div>
           </div>
 
