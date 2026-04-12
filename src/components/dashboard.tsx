@@ -38,7 +38,8 @@ function formatDateTime(value: string) {
 
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo"
   }).format(parsedDate);
 }
 
@@ -206,7 +207,9 @@ function SourceStatusCard({
       <dl className="mt-5 grid gap-3 text-sm text-slate-700">
         <div className="rounded-2xl bg-slate-50 px-4 py-3">
           <dt className="text-xs uppercase tracking-[0.16em] text-muted">App verificado em</dt>
-          <dd className="mt-1 font-semibold">{formatDateTime(source.checkedAt)}</dd>
+          <dd className="mt-1 font-semibold">
+            <span suppressHydrationWarning>{formatDateTime(source.checkedAt)}</span>
+          </dd>
         </div>
         <div className="rounded-2xl bg-slate-50 px-4 py-3">
           <dt className="text-xs uppercase tracking-[0.16em] text-muted">Cadencia</dt>
@@ -265,7 +268,8 @@ export function Dashboard({ data }: DashboardProps) {
               </span>
               <span className="soft-badge bg-slate-100 text-slate-700">App Router</span>
               <span className="soft-badge bg-slate-100 text-slate-700">
-                Atualizado em {formatDateTime(data.updatedAt)}
+                Atualizado em{" "}
+                <span suppressHydrationWarning>{formatDateTime(data.updatedAt)}</span>
               </span>
             </div>
           </div>

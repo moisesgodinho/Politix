@@ -57,8 +57,17 @@ export default async function SuppliersPage({ searchParams }: PageProps) {
               Quem recebeu, de quais deputados e em quais categorias.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
-              Base agregada a partir do arquivo anual oficial da cota parlamentar da Câmara.
+              Base agregada a partir do arquivo anual oficial da cota parlamentar da Camara.
             </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="secondary-button" href="/">
+                Voltar ao dashboard
+              </Link>
+              <Link className="primary-button" href="/insights">
+                Abrir rankings
+              </Link>
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -66,11 +75,15 @@ export default async function SuppliersPage({ searchParams }: PageProps) {
               <span className="soft-badge bg-[var(--accent-soft)] text-[var(--accent-contrast)]">
                 Fornecedores
               </span>
-              <p className="mt-5 text-3xl font-bold text-slate-950">{analytics.totals.supplierCount}</p>
+              <p className="mt-5 text-3xl font-bold text-slate-950">
+                {analytics.totals.supplierCount}
+              </p>
             </div>
             <div className="panel p-5">
               <span className="soft-badge bg-slate-100 text-slate-700">Valor bruto</span>
-              <p className="mt-5 text-3xl font-bold text-slate-950">{formatCurrency(analytics.totals.totalAmount)}</p>
+              <p className="mt-5 text-3xl font-bold text-slate-950">
+                {formatCurrency(analytics.totals.totalAmount)}
+              </p>
             </div>
           </div>
         </div>
@@ -110,7 +123,9 @@ export default async function SuppliersPage({ searchParams }: PageProps) {
               className="rounded-[24px] border border-slate-200/80 bg-white/95 p-5"
             >
               <h3 className="text-xl font-bold text-slate-950">{supplier.name}</h3>
-              <p className="mt-1 text-sm text-muted">{supplier.document ?? "Documento não informado"}</p>
+              <p className="mt-1 text-sm text-muted">
+                {supplier.document ?? "Documento nao informado"}
+              </p>
               <dl className="mt-5 grid gap-3 text-sm text-slate-700">
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
                   <dt className="text-xs uppercase tracking-[0.16em] text-muted">Valor bruto</dt>
@@ -121,12 +136,19 @@ export default async function SuppliersPage({ searchParams }: PageProps) {
                   <dd className="mt-1 font-semibold">{supplier.deputyCount}</dd>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <dt className="text-xs uppercase tracking-[0.16em] text-muted">Categoria dominante</dt>
-                  <dd className="mt-1 break-words font-semibold">{supplier.topCategory ?? "Não informada"}</dd>
+                  <dt className="text-xs uppercase tracking-[0.16em] text-muted">
+                    Categoria dominante
+                  </dt>
+                  <dd className="mt-1 break-words font-semibold">
+                    {supplier.topCategory ?? "Nao informada"}
+                  </dd>
                 </div>
               </dl>
 
-              <Link className="mt-5 inline-flex text-sm font-semibold text-teal-700 hover:underline" href={supplier.href}>
+              <Link
+                className="mt-5 inline-flex text-sm font-semibold text-teal-700 hover:underline"
+                href={supplier.href}
+              >
                 Abrir fornecedor
               </Link>
             </article>

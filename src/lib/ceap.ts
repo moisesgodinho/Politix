@@ -9,7 +9,8 @@ import {
 } from "@/lib/suppliers";
 
 const CEAP_REVALIDATE_SECONDS = 6 * 60 * 60;
-const CURRENT_CEAP_YEAR = 2026;
+const PREFERRED_CEAP_YEAR = new Date().getFullYear();
+const CEAP_MAX_FALLBACK_YEARS = 6;
 
 type CeapRawRecord = Record<string, unknown>;
 
@@ -139,6 +140,46 @@ export type CeapAnalytics = {
   suppliers: SupplierSummary[];
 };
 
+type CeapFilePayload = {
+  year: number;
+  preferredYear: number;
+  attemptedYears: number[];
+  payload: unknown;
+  checkedAt: string;
+  sourceUrl: string;
+  upstreamLastModified?: string;
+};
+
+type CachedCeapDataset = {
+  year: number;
+  preferredYear: number;
+  attemptedYears: number[];
+  records: CeapExpenseRecord[];
+  checkedAt: string;
+  sourceUrl: string;
+  upstreamLastModified?: string;
+  status: "ok" | "degraded";
+  errorDetails?: string;
+};
+
+function buildDegradedCeapDataset(error: unknown): CachedCeapDataset {
+  const checkedAt = new Date().toISOString();
+  const errorDetails =
+    error instanceof Error ? error.message : "Falha desconhecida ao consultar a CEAP.";
+
+  return {
+    year: PREFERRED_CEAP_YEAR,
+    preferredYear: PREFERRED_CEAP_YEAR,
+    attemptedYears: [PREFERRED_CEAP_YEAR],
+    records: [],
+    checkedAt,
+    sourceUrl: `https://www.camara.leg.br/cotas/Ano-${PREFERRED_CEAP_YEAR}.json`,
+    upstreamLastModified: undefined,
+    status: "degraded",
+    errorDetails
+  };
+}
+
 function pickString(record: CeapRawRecord, keys: string[], fallback = "") {
   for (const key of keys) {
     const value = record[key];
@@ -175,6 +216,10 @@ function pickNumber(record: CeapRawRecord, keys: string[]) {
   return 0;
 }
 
+function sanitizeJsonText(payload: string) {
+  return payload.replace(/^\uFEFF/, "").trimStart();
+}
+
 async function fetchCeapJson(year: number) {
   const checkedAt = new Date().toISOString();
   const url = `https://www.camara.leg.br/cotas/Ano-${year}.json`;
@@ -186,16 +231,60 @@ async function fetchCeapJson(year: number) {
     }
   });
 
+  if (response.status === 404) {
+    return undefined;
+  }
+
   if (!response.ok) {
     throw new Error(`Falha ao consultar CEAP ${year}: ${response.status}`);
   }
 
+  const rawPayload = sanitizeJsonText(await response.text());
+
+  if (!rawPayload) {
+    return undefined;
+  }
+
+  if (rawPayload.startsWith("<")) {
+    return undefined;
+  }
+
+  let parsedPayload: unknown;
+
+  try {
+    parsedPayload = JSON.parse(rawPayload) as unknown;
+  } catch {
+    return undefined;
+  }
+
   return {
-    payload: (await response.json()) as unknown,
+    year,
+    payload: parsedPayload,
     checkedAt,
     sourceUrl: url,
     upstreamLastModified: response.headers.get("last-modified") ?? undefined
   };
+}
+
+async function resolveCeapJson(preferredYear = PREFERRED_CEAP_YEAR): Promise<CeapFilePayload> {
+  const attemptedYears: number[] = [];
+
+  for (let year = preferredYear; year >= preferredYear - CEAP_MAX_FALLBACK_YEARS; year -= 1) {
+    attemptedYears.push(year);
+    const result = await fetchCeapJson(year);
+
+    if (result) {
+      return {
+        ...result,
+        preferredYear,
+        attemptedYears
+      };
+    }
+  }
+
+  throw new Error(
+    `Nenhum arquivo CEAP foi encontrado entre ${preferredYear - CEAP_MAX_FALLBACK_YEARS} e ${preferredYear}.`
+  );
 }
 
 function parseCeapRecords(payload: unknown, fallbackYear: number) {
@@ -565,37 +654,46 @@ function buildAlerts(records: CeapExpenseRecord[], deputyRanking: DeputySpending
 }
 
 const getCeapRecordsCached = unstable_cache(
-  async () => {
-    const [ceapFile, directory] = await Promise.all([
-      fetchCeapJson(CURRENT_CEAP_YEAR),
-      searchPoliticians({})
-    ]);
+  async (): Promise<CachedCeapDataset> => {
+    try {
+      const [ceapFile, directory] = await Promise.all([
+        resolveCeapJson(),
+        searchPoliticians({})
+      ]);
 
-    const directoryByName = new Map<string, Politician>();
+      const directoryByName = new Map<string, Politician>();
 
-    for (const politician of directory.items.filter((item) => item.source === "camara")) {
-      directoryByName.set(slugifySupplierName(politician.name), politician);
-    }
+      for (const politician of directory.items.filter((item) => item.source === "camara")) {
+        directoryByName.set(slugifySupplierName(politician.name), politician);
+      }
 
-    const records = parseCeapRecords(ceapFile.payload, CURRENT_CEAP_YEAR).map((record) => {
-      const directoryMatch = directoryByName.get(slugifySupplierName(record.deputyName));
+      const records = parseCeapRecords(ceapFile.payload, ceapFile.year).map((record) => {
+        const directoryMatch = directoryByName.get(slugifySupplierName(record.deputyName));
+
+        return {
+          ...record,
+          deputyId: record.deputyId ?? directoryMatch?.externalId,
+          party: record.party ?? directoryMatch?.party,
+          state: record.state ?? directoryMatch?.state
+        };
+      });
 
       return {
-        ...record,
-        deputyId: record.deputyId ?? directoryMatch?.externalId,
-        party: record.party ?? directoryMatch?.party,
-        state: record.state ?? directoryMatch?.state
+        year: ceapFile.year,
+        preferredYear: ceapFile.preferredYear,
+        attemptedYears: ceapFile.attemptedYears,
+        records,
+        checkedAt: ceapFile.checkedAt,
+        sourceUrl: ceapFile.sourceUrl,
+        upstreamLastModified: ceapFile.upstreamLastModified,
+        status: "ok",
+        errorDetails: undefined
       };
-    });
-
-    return {
-      records,
-      checkedAt: ceapFile.checkedAt,
-      sourceUrl: ceapFile.sourceUrl,
-      upstreamLastModified: ceapFile.upstreamLastModified
-    };
+    } catch (error) {
+      return buildDegradedCeapDataset(error);
+    }
   },
-  ["politix-ceap-records-v1"],
+  ["politix-ceap-records-v2"],
   {
     revalidate: CEAP_REVALIDATE_SECONDS
   }
@@ -607,9 +705,14 @@ const getCeapAnalyticsCached = unstable_cache(
     const records = dataset.records;
     const suppliers = buildSupplierSummaries(records);
     const topDeputies = buildDeputyRanking(records, {}).slice(0, 15);
+    const ceapSourceDetails =
+      dataset.status === "degraded"
+        ? dataset.errorDetails ??
+          "Nao foi possivel carregar a CEAP agora. O painel segue disponivel com estado vazio."
+        : "Arquivo anual consolidado da cota parlamentar, cacheado no app por 6 horas.";
 
     return {
-      year: CURRENT_CEAP_YEAR,
+      year: dataset.year,
       updatedAt: dataset.checkedAt,
       sourceStatus: [
         {
@@ -633,12 +736,12 @@ const getCeapAnalyticsCached = unstable_cache(
         {
           id: "ceap-file",
           label: "CEAP anual da Câmara",
-          status: "ok",
+          status: dataset.status,
           sourceUrl: dataset.sourceUrl,
           checkedAt: dataset.checkedAt,
           upstreamLastModified: dataset.upstreamLastModified,
           updateCadence: "Atualização diária declarada pela Câmara",
-          details: "Arquivo anual consolidado da cota parlamentar, cacheado no app por 6 horas."
+          details: ceapSourceDetails
         }
       ],
       availableStates: Array.from(
@@ -662,7 +765,7 @@ const getCeapAnalyticsCached = unstable_cache(
       suppliers
     };
   },
-  ["politix-ceap-analytics-v1"],
+  ["politix-ceap-analytics-v2"],
   {
     revalidate: CEAP_REVALIDATE_SECONDS
   }

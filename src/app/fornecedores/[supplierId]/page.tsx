@@ -47,15 +47,22 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
       <section className="panel overflow-hidden">
         <div className="grid gap-8 p-7 lg:grid-cols-[1.2fr,0.8fr] lg:p-8">
           <div>
-            <Link className="eyebrow" href="/fornecedores">
-              Voltar para fornecedores
-            </Link>
+            <span className="eyebrow">Fornecedor CEAP</span>
             <h1 className="mt-5 max-w-3xl text-4xl font-bold text-slate-950 sm:text-5xl">
               {supplier.name}
             </h1>
             <p className="mt-4 text-base text-muted">
-              {supplier.document ?? "Documento não informado"} • {supplier.deputyCount} deputados
+              {supplier.document ?? "Documento nao informado"} • {supplier.deputyCount} deputados
             </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="secondary-button" href="/fornecedores">
+                Voltar para fornecedores
+              </Link>
+              <Link className="primary-button" href="/">
+                Voltar ao dashboard
+              </Link>
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -63,7 +70,9 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
               <span className="soft-badge bg-[var(--accent-soft)] text-[var(--accent-contrast)]">
                 Valor bruto
               </span>
-              <p className="mt-5 text-3xl font-bold text-slate-950">{formatCurrency(supplier.totalAmount)}</p>
+              <p className="mt-5 text-3xl font-bold text-slate-950">
+                {formatCurrency(supplier.totalAmount)}
+              </p>
             </div>
             <div className="panel p-5">
               <span className="soft-badge bg-slate-100 text-slate-700">Despesas</span>
@@ -79,22 +88,33 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
         <section className="panel p-6 lg:p-7">
           <div className="border-b border-slate-200/80 pb-5">
             <span className="eyebrow">Deputados</span>
-            <h2 className="mt-3 text-2xl font-bold text-slate-950">Quem pagou este fornecedor</h2>
+            <h2 className="mt-3 text-2xl font-bold text-slate-950">
+              Quem pagou este fornecedor
+            </h2>
           </div>
           <div className="mt-6 space-y-4">
             {supplier.deputies.map((deputy) => (
-              <article key={`${deputy.deputyId ?? deputy.deputyName}`} className="rounded-[24px] bg-slate-50 px-4 py-4">
+              <article
+                key={`${deputy.deputyId ?? deputy.deputyName}`}
+                className="rounded-[24px] bg-slate-50 px-4 py-4"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h3 className="font-semibold text-slate-950">{deputy.deputyName}</h3>
                     <p className="mt-1 text-sm text-muted">
-                      {deputy.party ?? "Sem partido"} • {deputy.state ?? "Sem UF"} • {deputy.expenseCount} despesas
+                      {deputy.party ?? "Sem partido"} • {deputy.state ?? "Sem UF"} •{" "}
+                      {deputy.expenseCount} despesas
                     </p>
                   </div>
-                  <span className="font-bold text-slate-950">{formatCurrency(deputy.totalAmount)}</span>
+                  <span className="font-bold text-slate-950">
+                    {formatCurrency(deputy.totalAmount)}
+                  </span>
                 </div>
                 {deputy.profileHref ? (
-                  <Link className="mt-3 inline-flex text-sm font-semibold text-teal-700 hover:underline" href={deputy.profileHref}>
+                  <Link
+                    className="mt-3 inline-flex text-sm font-semibold text-teal-700 hover:underline"
+                    href={deputy.profileHref}
+                  >
                     Abrir deputado
                   </Link>
                 ) : null}
@@ -106,14 +126,18 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
         <section className="panel p-6 lg:p-7">
           <div className="border-b border-slate-200/80 pb-5">
             <span className="eyebrow">Categorias</span>
-            <h2 className="mt-3 text-2xl font-bold text-slate-950">Em quais tipos de despesa</h2>
+            <h2 className="mt-3 text-2xl font-bold text-slate-950">
+              Em quais tipos de despesa
+            </h2>
           </div>
           <div className="mt-6 space-y-4">
             {supplier.categories.map((category) => (
               <div key={category.category} className="rounded-[24px] bg-slate-50 px-4 py-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-950">{category.category}</span>
-                  <span className="font-bold text-slate-950">{formatCurrency(category.totalAmount)}</span>
+                  <span className="font-bold text-slate-950">
+                    {formatCurrency(category.totalAmount)}
+                  </span>
                 </div>
                 <p className="mt-1 text-sm text-muted">{category.expenseCount} despesas</p>
               </div>
@@ -125,7 +149,9 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
       <section className="panel p-6 lg:p-7">
         <div className="border-b border-slate-200/80 pb-5">
           <span className="eyebrow">Historico recente</span>
-          <h2 className="mt-3 text-2xl font-bold text-slate-950">Últimas despesas encontradas</h2>
+          <h2 className="mt-3 text-2xl font-bold text-slate-950">
+            Ultimas despesas encontradas
+          </h2>
         </div>
 
         <div className="mt-6 overflow-hidden rounded-[24px] border border-slate-200/80">
@@ -141,7 +167,10 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
               </thead>
               <tbody className="divide-y divide-slate-200/70">
                 {supplier.recentExpenses.map((expense, index) => (
-                  <tr key={`${expense.documentNumber ?? expense.documentDate ?? index}`} className="text-sm text-slate-700">
+                  <tr
+                    key={`${expense.documentNumber ?? expense.documentDate ?? index}`}
+                    className="text-sm text-slate-700"
+                  >
                     <td className="px-4 py-4">{formatDate(expense.documentDate)}</td>
                     <td className="px-4 py-4">
                       {expense.deputyName}
@@ -150,7 +179,9 @@ export default async function SupplierDetailsPage({ params }: SupplierPageProps)
                       </p>
                     </td>
                     <td className="px-4 py-4">{expense.expenseType}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-950">{formatCurrency(expense.amount)}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-950">
+                      {formatCurrency(expense.amount)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -13,7 +13,8 @@ function formatDateTime(value?: string) {
 
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo"
   }).format(parsedDate);
 }
 
@@ -47,7 +48,9 @@ export function SourceStatusPanel({ sources }: { sources: SourceStatus[] }) {
             <dl className="mt-5 grid gap-3 text-sm text-slate-700">
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <dt className="text-xs uppercase tracking-[0.16em] text-muted">App verificado em</dt>
-                <dd className="mt-1 font-semibold">{formatDateTime(source.checkedAt)}</dd>
+                <dd className="mt-1 font-semibold">
+                  <span suppressHydrationWarning>{formatDateTime(source.checkedAt)}</span>
+                </dd>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <dt className="text-xs uppercase tracking-[0.16em] text-muted">Fonte oficial</dt>
@@ -69,7 +72,11 @@ export function SourceStatusPanel({ sources }: { sources: SourceStatus[] }) {
               {source.upstreamLastModified ? (
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
                   <dt className="text-xs uppercase tracking-[0.16em] text-muted">Last-Modified</dt>
-                  <dd className="mt-1 font-semibold">{formatDateTime(source.upstreamLastModified)}</dd>
+                  <dd className="mt-1 font-semibold">
+                    <span suppressHydrationWarning>
+                      {formatDateTime(source.upstreamLastModified)}
+                    </span>
+                  </dd>
                 </div>
               ) : null}
             </dl>
