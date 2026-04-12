@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #edf4ef;
+  --foreground: #102331;
+  --surface: rgba(255, 255, 255, 0.84);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+  --border: rgba(16, 35, 49, 0.09);
+  --muted: #5d6b76;
+  --accent: #0f766e;
+  --accent-soft: rgba(20, 184, 166, 0.14);
+  --accent-contrast: #0a3f3b;
+  --warning: #a16207;
+  --warning-soft: rgba(245, 158, 11, 0.14);
+  --danger-soft: rgba(220, 38, 38, 0.12);
+  --shadow: 0 24px 64px rgba(16, 35, 49, 0.12);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--foreground);
+  background:
+    radial-gradient(circle at top left, rgba(20, 184, 166, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 24%),
+    linear-gradient(180deg, #f7fbf8 0%, #eff5f0 45%, #e7f0ea 100%);
+  font-family: var(--font-sans), sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: -0.04em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-[28px] border bg-white/80 shadow-soft backdrop-blur-sm;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-muted;
+  }
+
+  .field {
+    @apply h-12 w-full rounded-2xl border border-slate-200/80 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-teal-600/40 focus:ring-4 focus:ring-teal-500/10;
+  }
+
+  .primary-button {
+    @apply inline-flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800;
+  }
+
+  .secondary-button {
+    @apply inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50;
+  }
+
+  .soft-badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+}
