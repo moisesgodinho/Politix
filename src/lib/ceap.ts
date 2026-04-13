@@ -12,6 +12,20 @@ const CEAP_REVALIDATE_SECONDS = 6 * 60 * 60;
 const CEAP_DEGRADED_REVALIDATE_SECONDS = 10 * 60;
 const PREFERRED_CEAP_YEAR = new Date().getFullYear();
 const CEAP_MAX_FALLBACK_YEARS = 6;
+const PT_BR_MONTH_LABELS = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez"
+] as const;
 
 type CeapRawRecord = Record<string, unknown>;
 
@@ -149,6 +163,36 @@ export type CeapAnalytics = CeapAnalyticsBase & {
     minSpend?: number;
     maxSpend?: number;
   };
+};
+
+export type CeapCategoryBreakdownItem = {
+  label: string;
+  totalAmount: number;
+  expenseCount: number;
+  supplierCount: number;
+};
+
+export type CeapMonthlyBreakdownItem = {
+  monthKey: string;
+  label: string;
+  totalAmount: number;
+  totalNetAmount: number;
+  expenseCount: number;
+  deputyCount: number;
+};
+
+export type CeapPartySnapshot = {
+  party: string;
+  year: number;
+  updatedAt: string;
+  sourceStatus: SourceStatus[];
+  totals: CeapAnalyticsBase["totals"];
+  deputyRanking: DeputySpendingRank[];
+  stateRanking: GroupRankingItem[];
+  supplierRanking: SupplierRankingItem[];
+  alerts: CeapAlert[];
+  categoryBreakdown: CeapCategoryBreakdownItem[];
+  monthlySpending: CeapMonthlyBreakdownItem[];
 };
 
 type CeapFilePayload = {
@@ -564,6 +608,15 @@ function getDeputyDetailsHref(deputyId?: string) {
   return deputyId ? `/deputados/${deputyId}` : undefined;
 }
 
+function normalizePartyKey(value?: string) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function formatMonthLabel(year: number, month: number) {
+  const monthLabel = PT_BR_MONTH_LABELS[Math.max(0, Math.min(11, month - 1))] ?? "mes";
+  return `${monthLabel}/${String(year).slice(-2)}`;
+}
+
 function matchesRankingFilters(record: CeapExpenseRecord, filters: RankingFilters) {
   if (filters.uf && record.state !== filters.uf) {
     return false;
@@ -774,6 +827,85 @@ function buildSupplierRanking(suppliers: SupplierSummary[]): SupplierRankingItem
   }));
 }
 
+function buildCeapTotals(records: CeapExpenseRecord[], suppliers: SupplierSummary[]) {
+  return {
+    totalAmount: records.reduce((total, record) => total + record.amount, 0),
+    totalNetAmount: records.reduce((total, record) => total + record.netAmount, 0),
+    expenseCount: records.length,
+    deputyCount: new Set(records.map((record) => record.deputyId ?? record.deputyName)).size,
+    supplierCount: suppliers.length
+  };
+}
+
+function buildCategoryBreakdown(records: CeapExpenseRecord[]) {
+  const categoryMap = new Map<
+    string,
+    CeapCategoryBreakdownItem & {
+      supplierKeys: Set<string>;
+    }
+  >();
+
+  for (const record of records) {
+    const label = record.expenseType || "Categoria nao informada";
+    const current = categoryMap.get(label) ?? {
+      label,
+      totalAmount: 0,
+      expenseCount: 0,
+      supplierCount: 0,
+      supplierKeys: new Set<string>()
+    };
+
+    current.totalAmount += record.amount;
+    current.expenseCount += 1;
+    current.supplierKeys.add(getSupplierLookupKey(record.supplierDocument, record.supplierName));
+    categoryMap.set(label, current);
+  }
+
+  return [...categoryMap.values()]
+    .map(({ supplierKeys, ...item }) => ({
+      ...item,
+      supplierCount: supplierKeys.size
+    }))
+    .sort((left, right) => right.totalAmount - left.totalAmount)
+    .slice(0, 12);
+}
+
+function buildMonthlySpending(records: CeapExpenseRecord[]) {
+  const monthlyMap = new Map<
+    string,
+    CeapMonthlyBreakdownItem & {
+      deputyKeys: Set<string>;
+    }
+  >();
+
+  for (const record of records) {
+    const monthKey = `${record.year}-${String(record.month).padStart(2, "0")}`;
+    const current = monthlyMap.get(monthKey) ?? {
+      monthKey,
+      label: formatMonthLabel(record.year, record.month),
+      totalAmount: 0,
+      totalNetAmount: 0,
+      expenseCount: 0,
+      deputyCount: 0,
+      deputyKeys: new Set<string>()
+    };
+
+    current.totalAmount += record.amount;
+    current.totalNetAmount += record.netAmount;
+    current.expenseCount += 1;
+    current.deputyKeys.add(record.deputyId ?? record.deputyName);
+    monthlyMap.set(monthKey, current);
+  }
+
+  return [...monthlyMap.values()]
+    .map(({ deputyKeys, ...item }) => ({
+      ...item,
+      deputyCount: deputyKeys.size
+    }))
+    .sort((left, right) => left.monthKey.localeCompare(right.monthKey))
+    .slice(-12);
+}
+
 function buildAlerts(records: CeapExpenseRecord[], deputyRanking: DeputySpendingRank[]) {
   const alerts: CeapAlert[] = [];
   const deputyRecordMap = new Map<string, CeapExpenseRecord[]>();
@@ -852,6 +984,70 @@ function buildAlerts(records: CeapExpenseRecord[], deputyRanking: DeputySpending
   return alerts.slice(0, 12);
 }
 
+function buildCeapSourceStatus(dataset: CachedCeapDataset): SourceStatus[] {
+  const ceapSourceDetails =
+    dataset.status === "degraded"
+      ? dataset.errorDetails ??
+        "Nao foi possivel carregar a CEAP agora. O painel segue disponivel com estado vazio."
+      : "Arquivo anual consolidado da cota parlamentar, cacheado no app por 6 horas.";
+
+  return [
+    {
+      id: "camara-directory",
+      label: "Diretorio da Camara",
+      status: "ok",
+      sourceUrl: "https://dadosabertos.camara.leg.br/api/v2/deputados",
+      checkedAt: dataset.checkedAt,
+      updateCadence: "Revalidacao no app a cada 1 hora",
+      details: "Lista oficial de deputados em exercicio via API v2."
+    },
+    {
+      id: "senado-directory",
+      label: "Diretorio do Senado",
+      status: "ok",
+      sourceUrl: "https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json",
+      checkedAt: dataset.checkedAt,
+      updateCadence: "Revalidacao no app a cada 1 hora",
+      details: "Lista oficial de senadores em exercicio."
+    },
+    {
+      id: "ceap-file",
+      label: "CEAP anual da Camara",
+      status: dataset.status,
+      sourceUrl: dataset.sourceUrl,
+      checkedAt: dataset.checkedAt,
+      upstreamLastModified: dataset.upstreamLastModified,
+      updateCadence: "Atualizacao diaria declarada pela Camara",
+      details: ceapSourceDetails
+    }
+  ];
+}
+
+function buildCeapAnalyticsBase(dataset: CachedCeapDataset): CeapAnalyticsBase {
+  const records = dataset.records;
+  const suppliers = buildSupplierSummaries(records);
+  const topDeputies = buildDeputyRanking(records, {}).slice(0, 15);
+
+  return {
+    year: dataset.year,
+    updatedAt: dataset.checkedAt,
+    sourceStatus: buildCeapSourceStatus(dataset),
+    availableStates: Array.from(
+      new Set(records.map((record) => record.state).filter((state): state is string => Boolean(state)))
+    ).sort(),
+    availableParties: Array.from(
+      new Set(records.map((record) => record.party).filter((party): party is string => Boolean(party)))
+    ).sort(),
+    totals: buildCeapTotals(records, suppliers),
+    topDeputies,
+    topStates: buildGroupedRanking(records, "state"),
+    topParties: buildGroupedRanking(records, "party"),
+    topSuppliers: buildSupplierRanking(suppliers),
+    alerts: buildAlerts(records, topDeputies),
+    suppliers
+  };
+}
+
 const getCeapRecordsCached = unstable_cache(
   async (): Promise<CachedCeapDataset> => {
     try {
@@ -900,6 +1096,8 @@ const getCeapRecordsCached = unstable_cache(
 
 const getCeapAnalyticsCached = unstable_cache(
   async (): Promise<CeapAnalyticsBase> => {
+    return buildCeapAnalyticsBase(await getCeapRecordsCached());
+
     const dataset = await getCeapRecordsCached();
     const records = dataset.records;
     const suppliers = buildSupplierSummaries(records);
@@ -970,6 +1168,36 @@ const getCeapAnalyticsCached = unstable_cache(
   }
 );
 
+const getPartySnapshotCached = unstable_cache(
+  async (party: string): Promise<CeapPartySnapshot> => {
+    const normalizedParty = normalizePartyKey(party);
+    const dataset = await getCeapRecordsCached();
+    const partyRecords = dataset.records.filter(
+      (record) => normalizePartyKey(record.party) === normalizedParty
+    );
+    const suppliers = buildSupplierSummaries(partyRecords);
+    const deputyRanking = buildDeputyRanking(partyRecords, {}).slice(0, 20);
+
+    return {
+      party: normalizedParty,
+      year: dataset.year,
+      updatedAt: dataset.checkedAt,
+      sourceStatus: buildCeapSourceStatus(dataset),
+      totals: buildCeapTotals(partyRecords, suppliers),
+      deputyRanking,
+      stateRanking: buildGroupedRanking(partyRecords, "state"),
+      supplierRanking: buildSupplierRanking(suppliers),
+      alerts: buildAlerts(partyRecords, deputyRanking),
+      categoryBreakdown: buildCategoryBreakdown(partyRecords),
+      monthlySpending: buildMonthlySpending(partyRecords)
+    };
+  },
+  ["politix-party-snapshot-v1"],
+  {
+    revalidate: CEAP_REVALIDATE_SECONDS
+  }
+);
+
 export async function getCeapAnalytics(filters: RankingFilters = {}) {
   const [analytics, allRecords] = await Promise.all([getCeapAnalyticsCached(), getCeapRecords()]);
 
@@ -987,6 +1215,10 @@ export async function getCeapAnalytics(filters: RankingFilters = {}) {
 
 export async function getCeapRecords() {
   return (await getCeapRecordsCached()).records;
+}
+
+export async function getPartySnapshot(party: string) {
+  return getPartySnapshotCached(normalizePartyKey(party));
 }
 
 export async function getSupplierDetails(supplierId: string) {

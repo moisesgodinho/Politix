@@ -172,6 +172,71 @@ export type DeputyDetails = Politician & {
   expenseCategories: ExpenseRankingPoint[];
 };
 
+export type SenatorPhone = {
+  number: string;
+  isFax: boolean;
+};
+
+export type SenatorServiceLink = {
+  name: string;
+  description?: string;
+  url: string;
+};
+
+export type SenatorMandateParty = {
+  code?: string;
+  acronym?: string;
+  name?: string;
+  joinedAt?: string;
+  leftAt?: string;
+};
+
+export type SenatorMandateAlternate = {
+  code?: string;
+  name: string;
+  role?: string;
+};
+
+export type SenatorMandateSummary = {
+  code?: string;
+  state?: string;
+  description?: string;
+  firstLegislature?: {
+    number?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  secondLegislature?: {
+    number?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  parties: SenatorMandateParty[];
+  alternates: SenatorMandateAlternate[];
+  exercisesCount: number;
+};
+
+export type SenatorDetails = Politician & {
+  publicCode?: string;
+  gender?: string;
+  birthDate?: string;
+  birthCity?: string;
+  birthState?: string;
+  address?: string;
+  block?: {
+    code?: string;
+    name?: string;
+    nickname?: string;
+    createdAt?: string;
+  };
+  isBoardMember: boolean;
+  isLeadershipMember: boolean;
+  phones: SenatorPhone[];
+  currentMandate?: SenatorMandateSummary;
+  mandates: SenatorMandateSummary[];
+  openDataServices: SenatorServiceLink[];
+};
+
 type CamaraDeputy = {
   id: number;
   uri?: string;
@@ -250,13 +315,61 @@ type CamaraExpenseResponse = {
 };
 
 type SenadoMandate = {
+  CodigoMandato?: string;
   UfParlamentar?: string;
   DescricaoParticipacao?: string;
   PrimeiraLegislaturaDoMandato?: {
     NumeroLegislatura?: string;
+    DataInicio?: string;
+    DataFim?: string;
   };
   SegundaLegislaturaDoMandato?: {
     NumeroLegislatura?: string;
+    DataInicio?: string;
+    DataFim?: string;
+  };
+  Suplentes?: {
+    Suplente?:
+      | {
+          DescricaoParticipacao?: string;
+          CodigoParlamentar?: string;
+          NomeParlamentar?: string;
+        }
+      | Array<{
+          DescricaoParticipacao?: string;
+          CodigoParlamentar?: string;
+          NomeParlamentar?: string;
+        }>;
+  };
+  Exercicios?: {
+    Exercicio?:
+      | {
+          CodigoExercicio?: string;
+          DataInicio?: string;
+          DataFim?: string;
+        }
+      | Array<{
+          CodigoExercicio?: string;
+          DataInicio?: string;
+          DataFim?: string;
+        }>;
+  };
+  Partidos?: {
+    Partido?:
+      | {
+          CodigoPartido?: string;
+          Sigla?: string;
+          Nome?: string;
+          DataFiliacao?: string;
+          DataDesfiliacao?: string;
+        }
+      | Array<{
+          CodigoPartido?: string;
+          Sigla?: string;
+          Nome?: string;
+          DataFiliacao?: string;
+          DataDesfiliacao?: string;
+        }>;
   };
 };
 
@@ -292,6 +405,69 @@ type SenadoResponse = {
   ListaParlamentarEmExercicio?: {
     Parlamentares?: {
       Parlamentar?: SenadoParlamentar | SenadoParlamentar[];
+    };
+  };
+};
+
+type SenadoPhoneResponse = {
+  NumeroTelefone?: string;
+  OrdemPublicacao?: string;
+  IndicadorFax?: string;
+};
+
+type SenadoServiceResponse = {
+  NomeServico?: string;
+  DescricaoServico?: string;
+  UrlServico?: string;
+};
+
+type SenadoDetailResponse = {
+  DetalheParlamentar?: {
+    Parlamentar?: {
+      IdentificacaoParlamentar?: {
+        CodigoParlamentar?: string;
+        CodigoPublicoNaLegAtual?: string;
+        NomeParlamentar?: string;
+        NomeCompletoParlamentar?: string;
+        SexoParlamentar?: string;
+        UrlFotoParlamentar?: string;
+        UrlPaginaParlamentar?: string;
+        EmailParlamentar?: string;
+        SiglaPartidoParlamentar?: string;
+        UfParlamentar?: string;
+        Bloco?: {
+          CodigoBloco?: string;
+          NomeBloco?: string;
+          NomeApelido?: string;
+          DataCriacao?: string;
+        };
+        MembroMesa?: string;
+        MembroLideranca?: string;
+      };
+      DadosBasicosParlamentar?: {
+        DataNascimento?: string;
+        Naturalidade?: string;
+        UfNaturalidade?: string;
+        EnderecoParlamentar?: string;
+      };
+      Telefones?: {
+        Telefone?: SenadoPhoneResponse | SenadoPhoneResponse[];
+      };
+      OutrasInformacoes?: {
+        Servico?: SenadoServiceResponse | SenadoServiceResponse[];
+      };
+    };
+  };
+};
+
+type SenadoMandatesResponse = {
+  MandatoParlamentar?: {
+    Parlamentar?: {
+      Codigo?: string;
+      Nome?: string;
+      Mandatos?: {
+        Mandato?: SenadoMandate | SenadoMandate[];
+      };
     };
   };
 };
@@ -338,8 +514,31 @@ function sleep(timeoutMs: number) {
   return new Promise((resolve) => setTimeout(resolve, timeoutMs));
 }
 
+function normalizeUrl(value?: string) {
+  const normalizedValue = String(value ?? "").trim();
+
+  if (!normalizedValue) {
+    return undefined;
+  }
+
+  return normalizedValue.replace(/^http:\/\//i, "https://");
+}
+
 function getCamaraOfficialProfileUrl(id: string | number) {
   return `https://www.camara.leg.br/deputados/${id}/biografia`;
+}
+
+function buildSenateLegislatureLabel(mandate?: SenadoMandate) {
+  if (!mandate) {
+    return undefined;
+  }
+
+  const legislatures = [
+    mandate.PrimeiraLegislaturaDoMandato?.NumeroLegislatura,
+    mandate.SegundaLegislaturaDoMandato?.NumeroLegislatura
+  ].filter(Boolean);
+
+  return legislatures.length > 0 ? legislatures.join(" e ") : undefined;
 }
 
 function formatMonthYear(month?: number, year?: number) {
@@ -475,17 +674,83 @@ function mapSenador(senator: SenadoParlamentar): Politician {
     state,
     city: city || undefined,
     email: String(pickFirst(identity.EmailParlamentar, senator.EmailParlamentar) ?? "") || undefined,
-    photoUrl:
-      String(pickFirst(identity.UrlFotoParlamentar, senator.UrlFotoParlamentar) ?? "") || undefined,
-    profileUrl:
-      String(pickFirst(identity.UrlPaginaParlamentar, senator.UrlPaginaParlamentar) ?? "") || undefined,
-    legislature: String(
-      pickFirst(
-        mandate?.PrimeiraLegislaturaDoMandato?.NumeroLegislatura,
-        mandate?.SegundaLegislaturaDoMandato?.NumeroLegislatura
-      ) ?? ""
-    ) || undefined,
+    photoUrl: normalizeUrl(
+      String(pickFirst(identity.UrlFotoParlamentar, senator.UrlFotoParlamentar) ?? "")
+    ),
+    profileUrl: normalizeUrl(
+      String(pickFirst(identity.UrlPaginaParlamentar, senator.UrlPaginaParlamentar) ?? "")
+    ),
+    legislature: buildSenateLegislatureLabel(mandate),
     status: String(pickFirst(mandate?.DescricaoParticipacao, senator.DescricaoParticipacao, "Em exercício"))
+  };
+}
+
+function mapSenatorPhone(phone: SenadoPhoneResponse): SenatorPhone | undefined {
+  const number = String(phone.NumeroTelefone ?? "").trim();
+
+  if (!number) {
+    return undefined;
+  }
+
+  return {
+    number,
+    isFax: normalizeText(phone.IndicadorFax) === "sim"
+  };
+}
+
+function mapSenatorService(service: SenadoServiceResponse): SenatorServiceLink | undefined {
+  const name = String(service.NomeServico ?? "").trim();
+  const url = normalizeUrl(service.UrlServico);
+
+  if (!name || !url) {
+    return undefined;
+  }
+
+  return {
+    name,
+    description: String(service.DescricaoServico ?? "").trim() || undefined,
+    url
+  };
+}
+
+function mapSenatorMandate(mandate: SenadoMandate): SenatorMandateSummary {
+  return {
+    code: mandate.CodigoMandato,
+    state: mandate.UfParlamentar,
+    description: mandate.DescricaoParticipacao,
+    firstLegislature: {
+      number: mandate.PrimeiraLegislaturaDoMandato?.NumeroLegislatura,
+      startDate: mandate.PrimeiraLegislaturaDoMandato?.DataInicio,
+      endDate: mandate.PrimeiraLegislaturaDoMandato?.DataFim
+    },
+    secondLegislature: {
+      number: mandate.SegundaLegislaturaDoMandato?.NumeroLegislatura,
+      startDate: mandate.SegundaLegislaturaDoMandato?.DataInicio,
+      endDate: mandate.SegundaLegislaturaDoMandato?.DataFim
+    },
+    parties: toArray(mandate.Partidos?.Partido).map((party) => ({
+      code: party.CodigoPartido,
+      acronym: party.Sigla,
+      name: party.Nome,
+      joinedAt: party.DataFiliacao,
+      leftAt: party.DataDesfiliacao
+    })),
+    alternates: toArray(mandate.Suplentes?.Suplente).flatMap((alternate) => {
+      const name = String(alternate.NomeParlamentar ?? "").trim();
+
+      if (!name) {
+        return [];
+      }
+
+      return [
+        {
+          code: alternate.CodigoParlamentar,
+          name,
+          role: alternate.DescricaoParticipacao
+        } satisfies SenatorMandateAlternate
+      ];
+    }),
+    exercisesCount: toArray(mandate.Exercicios?.Exercicio).length
   };
 }
 
@@ -870,4 +1135,100 @@ const getDeputyDetailsCached = unstable_cache(
 
 export async function getDeputyDetails(id: string): Promise<DeputyDetails> {
   return getDeputyDetailsCached(id);
+}
+
+const getSenatorDetailsCached = unstable_cache(
+  async (id: string) => {
+    const [directoryBundle, detailsResponse, mandatesResponse] = await Promise.all([
+      getPoliticianDirectory(),
+      fetchGovernmentJson<SenadoDetailResponse>(`${SENADO_API_BASE}/senador/${id}.json`, {
+        revalidateSeconds: DETAIL_REVALIDATE_SECONDS,
+        tags: ["politicians", `senado-senador-${id}`]
+      }),
+      fetchGovernmentJson<SenadoMandatesResponse>(`${SENADO_API_BASE}/senador/${id}/mandatos.json`, {
+        revalidateSeconds: DETAIL_REVALIDATE_SECONDS,
+        tags: ["politicians", `senado-senador-${id}`, "senado-mandatos"]
+      })
+    ]);
+    const directory = directoryBundle.items;
+
+    const directoryEntry = directory.find(
+      (politician) => politician.source === "senado" && politician.externalId === id
+    );
+
+    if (!directoryEntry) {
+      throw new Error(`Senador ${id} nao encontrado no diretorio local.`);
+    }
+
+    const senator = detailsResponse.DetalheParlamentar?.Parlamentar;
+    const identity = senator?.IdentificacaoParlamentar;
+    const basicData = senator?.DadosBasicosParlamentar;
+    const phones = toArray(senator?.Telefones?.Telefone)
+      .map(mapSenatorPhone)
+      .filter((phone): phone is SenatorPhone => Boolean(phone));
+    const mandates = toArray(mandatesResponse.MandatoParlamentar?.Parlamentar?.Mandatos?.Mandato).map(
+      mapSenatorMandate
+    );
+    const currentMandate = mandates[0];
+    const serviceLinks = toArray(senator?.OutrasInformacoes?.Servico)
+      .map(mapSenatorService)
+      .filter((service): service is SenatorServiceLink => Boolean(service));
+
+    return {
+      ...directoryEntry,
+      name: identity?.NomeParlamentar ?? directoryEntry.name,
+      fullName: identity?.NomeCompletoParlamentar ?? directoryEntry.fullName,
+      party: identity?.SiglaPartidoParlamentar ?? directoryEntry.party,
+      state: identity?.UfParlamentar ?? currentMandate?.state ?? directoryEntry.state,
+      email: identity?.EmailParlamentar ?? directoryEntry.email,
+      photoUrl: normalizeUrl(identity?.UrlFotoParlamentar) ?? directoryEntry.photoUrl,
+      profileUrl: normalizeUrl(identity?.UrlPaginaParlamentar) ?? directoryEntry.profileUrl,
+      legislature:
+        buildSenateLegislatureLabel({
+          PrimeiraLegislaturaDoMandato: currentMandate?.firstLegislature
+            ? {
+                NumeroLegislatura: currentMandate.firstLegislature.number,
+                DataInicio: currentMandate.firstLegislature.startDate,
+                DataFim: currentMandate.firstLegislature.endDate
+              }
+            : undefined,
+          SegundaLegislaturaDoMandato: currentMandate?.secondLegislature
+            ? {
+                NumeroLegislatura: currentMandate.secondLegislature.number,
+                DataInicio: currentMandate.secondLegislature.startDate,
+                DataFim: currentMandate.secondLegislature.endDate
+              }
+            : undefined
+        }) ?? directoryEntry.legislature,
+      status: currentMandate?.description ?? directoryEntry.status,
+      publicCode: identity?.CodigoPublicoNaLegAtual,
+      gender: identity?.SexoParlamentar,
+      birthDate: basicData?.DataNascimento,
+      birthCity: basicData?.Naturalidade,
+      birthState: basicData?.UfNaturalidade,
+      address: basicData?.EnderecoParlamentar,
+      block: identity?.Bloco
+        ? {
+            code: identity.Bloco.CodigoBloco,
+            name: identity.Bloco.NomeBloco,
+            nickname: identity.Bloco.NomeApelido,
+            createdAt: identity.Bloco.DataCriacao
+          }
+        : undefined,
+      isBoardMember: normalizeText(identity?.MembroMesa) === "sim",
+      isLeadershipMember: normalizeText(identity?.MembroLideranca) === "sim",
+      phones,
+      currentMandate,
+      mandates,
+      openDataServices: serviceLinks
+    } satisfies SenatorDetails;
+  },
+  ["politix-senator-details-v1"],
+  {
+    revalidate: DETAIL_REVALIDATE_SECONDS
+  }
+);
+
+export async function getSenatorDetails(id: string): Promise<SenatorDetails> {
+  return getSenatorDetailsCached(id);
 }

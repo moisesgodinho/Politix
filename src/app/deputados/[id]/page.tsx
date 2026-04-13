@@ -85,9 +85,12 @@ export default async function DeputyDetailsPage({ params }: DeputyPageProps) {
                     <span className="soft-badge bg-[var(--accent-soft)] text-[var(--accent-contrast)]">
                       Deputado Federal
                     </span>
-                    <span className="soft-badge bg-slate-100 text-slate-700">
+                    <Link
+                      className="soft-badge bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      href={`/partidos/${encodeURIComponent(deputy.party)}`}
+                    >
                       {deputy.party} / {deputy.state}
-                    </span>
+                    </Link>
                   </div>
 
                   <h1 className="mt-4 text-4xl font-bold text-slate-950">{deputy.name}</h1>
@@ -100,6 +103,12 @@ export default async function DeputyDetailsPage({ params }: DeputyPageProps) {
                   </p>
 
                   <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <Link
+                      className="secondary-button"
+                      href={`/partidos/${encodeURIComponent(deputy.party)}`}
+                    >
+                      Ver partido
+                    </Link>
                     {deputy.profileUrl ? (
                       <a
                         className="primary-button"

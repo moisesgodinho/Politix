@@ -89,8 +89,10 @@ function ResultsHeader({
 }
 
 function PoliticianCard({ politician }: { politician: Politician }) {
-  const deputyDetailsHref =
-    politician.source === "camara" ? `/deputados/${politician.externalId}` : undefined;
+  const detailsHref =
+    politician.source === "camara"
+      ? `/deputados/${politician.externalId}`
+      : `/senadores/${politician.externalId}`;
 
   return (
     <article className="rounded-[24px] border border-slate-200/70 bg-white/95 p-5 transition hover:-translate-y-0.5 hover:border-teal-700/20 hover:shadow-lg">
@@ -160,10 +162,10 @@ function PoliticianCard({ politician }: { politician: Politician }) {
           ID {politician.externalId}
         </span>
         <div className="flex items-center gap-3">
-          {deputyDetailsHref ? (
+          {detailsHref ? (
             <Link
               className="text-sm font-semibold text-slate-950 transition hover:text-teal-800"
-              href={deputyDetailsHref}
+              href={detailsHref}
             >
               Ver detalhes
             </Link>
@@ -253,6 +255,9 @@ export function Dashboard({ data }: DashboardProps) {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link className="primary-button" href="/insights">
                 Abrir rankings e alertas
+              </Link>
+              <Link className="secondary-button" href="/comparar">
+                Comparar deputados
               </Link>
               <Link className="secondary-button" href="/radar">
                 Abrir radar de licitacoes

@@ -245,7 +245,11 @@ export default async function InsightsPage({ searchParams }: PageProps) {
           </div>
           <div className="mt-6 space-y-4">
             {analytics.topParties.map((item) => (
-              <div key={item.label} className="rounded-[24px] bg-slate-50 px-4 py-4">
+              <Link
+                key={item.label}
+                className="block rounded-[24px] bg-slate-50 px-4 py-4 transition hover:bg-slate-100"
+                href={`/partidos/${encodeURIComponent(item.label)}`}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-950">{item.label}</span>
                   <span className="font-bold text-slate-950">{formatCurrency(item.totalAmount)}</span>
@@ -253,7 +257,7 @@ export default async function InsightsPage({ searchParams }: PageProps) {
                 <p className="mt-1 text-sm text-muted">
                   Média por deputado: {formatCurrency(item.averageAmount)}
                 </p>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
