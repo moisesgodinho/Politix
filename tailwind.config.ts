@@ -11,7 +11,10 @@ const config: Config = {
         surface: "var(--surface)",
         accent: "var(--accent)",
         "accent-soft": "var(--accent-soft)",
-        border: "var(--border)"
+        border: "var(--border)",
+        warning: "var(--warning)",
+        "warning-soft": "var(--warning-soft)",
+        "danger-soft": "var(--danger-soft)"
       },
       boxShadow: {
         soft: "var(--shadow)"

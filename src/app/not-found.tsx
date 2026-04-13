@@ -1,24 +1,12 @@
-import Link from "next/link";
-
 export default function NotFound() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center gap-6 px-6 py-16 text-center">
-      <span className="soft-badge bg-[var(--warning-soft)] text-[var(--warning)]">
-        Recurso nao encontrado
-      </span>
-      <div className="space-y-3">
-        <h1 className="text-4xl font-bold text-slate-950">Nao encontramos esta pagina.</h1>
-        <p className="max-w-2xl text-base leading-7 text-muted">
-          O link pode estar incompleto ou o registro ainda nao foi indexado no snapshot atual.
+    <main className="mx-auto flex min-h-screen max-w-4xl items-center justify-center px-6 py-10">
+      <div className="panel w-full max-w-2xl px-8 py-12 text-center">
+        <span className="eyebrow">404</span>
+        <h1 className="mt-4 text-4xl text-slate-950">Pagina nao encontrada</h1>
+        <p className="mt-4 text-base leading-7 text-slate-600">
+          O recurso solicitado nao existe ou ainda nao foi publicado neste MVP.
         </p>
-      </div>
-      <div className="flex flex-wrap justify-center gap-3">
-        <Link className="primary-button" href="/">
-          Voltar ao dashboard
-        </Link>
-        <Link className="secondary-button" href="/fornecedores">
-          Explorar fornecedores
-        </Link>
       </div>
     </main>
   );

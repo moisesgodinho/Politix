@@ -14,9 +14,9 @@ const display = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Politix | Transparência política",
+  title: "Politix | Transparencia municipal em MG",
   description:
-    "MVP para monitorar políticos, gastos, assiduidade e contratos públicos com dados oficiais."
+    "MVP para monitorar licitacoes municipais em Minas Gerais com dados ao vivo do IBGE, PNCP e BrasilAPI."
 };
 
 export default function RootLayout({
